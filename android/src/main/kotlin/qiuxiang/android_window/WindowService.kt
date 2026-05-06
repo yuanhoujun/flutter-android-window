@@ -15,6 +15,15 @@ import io.flutter.embedding.engine.dart.DartExecutor
 const val engineId = "flutter-android-window"
 
 class WindowService : android.app.Service() {
+  companion object {
+    var isWindowRunning = false
+      private set
+
+    fun updateWindowRunning(isRunning: Boolean) {
+      isWindowRunning = isRunning
+    }
+  }
+
   private lateinit var engine: FlutterEngine
   private lateinit var androidWindow: AndroidWindow
   private var running = false
@@ -26,12 +35,20 @@ class WindowService : android.app.Service() {
 
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
-    androidWindow.updateLayout()
+    if (::androidWindow.isInitialized) {
+      androidWindow.updateLayout()
+    }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if(intent == null) return super.onStartCommand(null, flags, startId)
-    
+
+    val focusable = intent.getBooleanExtra("focusable", false)
+    val width = intent.getIntExtra("width", 400)
+    val height = intent.getIntExtra("height", 600)
+    val x = intent.getIntExtra("x", 0)
+    val y = intent.getIntExtra("y", 0)
+
     if (!running) {
       engine = FlutterEngine(application)
       FlutterEngineCache.getInstance().put(engineId, engine)
@@ -40,16 +57,18 @@ class WindowService : android.app.Service() {
       val entryPoint = DartExecutor.DartEntrypoint(bundlePath, entry)
       engine.dartExecutor.executeDartEntrypoint(entryPoint)
 
-      val focusable = intent.getBooleanExtra("focusable", false)
-      val width = intent.getIntExtra("width", 400)
-      val height = intent.getIntExtra("height", 600)
-      val x = intent.getIntExtra("x", 0)
-      val y = intent.getIntExtra("y", 0)
       androidWindow = AndroidWindow(this, focusable, width, height, x, y, engine)
       androidWindow.open()
+      updateWindowRunning(true)
       startForeground(1, getNotification())
       running = true
+    } else {
+      androidWindow.close()
+      androidWindow = AndroidWindow(this, focusable, width, height, x, y, engine)
+      androidWindow.open()
+      updateWindowRunning(true)
     }
+
     return super.onStartCommand(intent, flags, startId)
   }
 
@@ -65,7 +84,10 @@ class WindowService : android.app.Service() {
   }
 
   override fun onDestroy() {
-    androidWindow.close()
+    if (::androidWindow.isInitialized) {
+      androidWindow.close()
+    }
+    updateWindowRunning(false)
     try {
       engine.destroy()
       FlutterEngineCache.getInstance().remove(engineId)

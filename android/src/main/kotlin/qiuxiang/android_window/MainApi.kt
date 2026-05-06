@@ -42,7 +42,7 @@ class MainApi(private val activity: Activity) : Pigeon.MainApi {
   }
 
   override fun isRunning(result: Pigeon.Result<Boolean>) {
-    result.success(FlutterEngineCache.getInstance().get(engineId) != null)
+    result.success(WindowService.isWindowRunning)
   }
 
   override fun post(message: MutableMap<Any, Any>, result: Pigeon.Result<MutableMap<Any, Any>>) {
