@@ -8,7 +8,17 @@ final _api = AndroidWindowApi();
 /// Android window widget.
 class AndroidWindow extends StatefulWidget {
   final Widget child;
-  const AndroidWindow({required this.child, Key? key}) : super(key: key);
+  final bool dragEnabled;
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
+
+  const AndroidWindow({
+    required this.child,
+    this.dragEnabled = true,
+    this.onDragStart,
+    this.onDragEnd,
+    Key? key,
+  }) : super(key: key);
 
   @override
   State<AndroidWindow> createState() => _AndroidWindowState();
@@ -52,6 +62,7 @@ class AndroidWindow extends StatefulWidget {
 
 class _AndroidWindowState extends State<AndroidWindow> {
   bool start = false;
+  bool dragging = false;
 
   @override
   Widget build(BuildContext context) {
@@ -66,13 +77,20 @@ class _AndroidWindowState extends State<AndroidWindow> {
                 start = true;
               }
               ..onUpdate = (event) {
-                if (start) {
+                if (start && widget.dragEnabled) {
                   _api.dragStart();
                   start = false;
+                  dragging = true;
+                  widget.onDragStart?.call();
                 }
               }
               ..onEnd = (event) {
-                _api.dragEnd();
+                if (dragging) {
+                  _api.dragEnd();
+                  widget.onDragEnd?.call();
+                }
+                dragging = false;
+                start = false;
               };
           },
         ),

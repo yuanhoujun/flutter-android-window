@@ -162,7 +162,9 @@ class AndroidWindow(
 
     layoutParams.width = width
     layoutParams.height = height
-    windowManager.updateViewLayout(rootView, layoutParams)
+    // A smaller window may make the previous bottom/right position invalid.
+    // Re-applying the position keeps the entire overlay on screen.
+    setPosition(layoutParams.x, layoutParams.y)
   }
 
   fun setPosition(x: Int, y: Int) {
