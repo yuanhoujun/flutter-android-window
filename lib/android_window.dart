@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'pigeon.g.dart';
 
@@ -7,6 +8,10 @@ final _api = AndroidWindowApi();
 
 /// Android window widget.
 class AndroidWindow extends StatefulWidget {
+  static const _displayMetricsChannel = MethodChannel(
+    'android_window/display_metrics',
+  );
+
   final Widget child;
   final bool dragEnabled;
   final VoidCallback? onDragStart;
@@ -26,6 +31,18 @@ class AndroidWindow extends StatefulWidget {
   /// Resize android window.
   static void resize(int width, int height) {
     _api.resize(width, height);
+  }
+
+  /// Returns the current physical display size reported by Android's window
+  /// manager. This remains accurate when an overlay engine survives rotation.
+  static Future<Size?> getDisplayPhysicalSize() async {
+    final metrics = await _displayMetricsChannel.invokeMapMethod<String, int>(
+      'getDisplayPhysicalSize',
+    );
+    final width = metrics?['width'];
+    final height = metrics?['height'];
+    if (width == null || height == null) return null;
+    return Size(width.toDouble(), height.toDouble());
   }
 
   /// Set position of window.

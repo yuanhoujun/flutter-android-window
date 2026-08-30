@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import io.flutter.embedding.android.FlutterTextureView
 import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -27,11 +28,16 @@ class AndroidWindow(
   private var initialX = 0
   private var initialY = 0
   private var dragging = false
+  private var keepHorizontallyCentered = x < 0
   private var flutterView: FlutterView? = null
   private var isOpen = false
   private var windowManager = service.getSystemService(Service.WINDOW_SERVICE) as WindowManager
   private val inflater = service.getSystemService(Service.LAYOUT_INFLATER_SERVICE) as LayoutInflater
   private val metrics = DisplayMetrics()
+  private val displayMetricsChannel = MethodChannel(
+    engine.dartExecutor.binaryMessenger,
+    "android_window/display_metrics"
+  )
 
   @SuppressLint("InflateParams")
   private var rootView = inflater.inflate(R.layout.floating, null) as ViewGroup
@@ -61,12 +67,28 @@ class AndroidWindow(
     val floatingApi = AndroidWindowApi(this)
     Pigeon.AndroidWindowApi.setUp(engine.dartExecutor.binaryMessenger, floatingApi)
     layoutParams.gravity = Gravity.START or Gravity.TOP
-    layoutParams.x = x
+    @Suppress("Deprecation")
+    windowManager.defaultDisplay.getRealMetrics(metrics)
+    layoutParams.x = if (x < 0) max(0, (metrics.widthPixels - layoutParams.width) / 2) else x
     layoutParams.y = y
     rootView.removeOnAttachStateChangeListener(attachStateChangeListener)
     rootView.addOnAttachStateChangeListener(attachStateChangeListener)
     windowManager.addView(rootView, layoutParams)
-    @Suppress("Deprecation") windowManager.defaultDisplay.getMetrics(metrics)
+    @Suppress("Deprecation") windowManager.defaultDisplay.getRealMetrics(metrics)
+    displayMetricsChannel.setMethodCallHandler { call, result ->
+      if (call.method != "getDisplayPhysicalSize") {
+        result.notImplemented()
+        return@setMethodCallHandler
+      }
+      @Suppress("Deprecation")
+      windowManager.defaultDisplay.getRealMetrics(metrics)
+      result.success(
+        mapOf(
+          "width" to metrics.widthPixels,
+          "height" to metrics.heightPixels
+        )
+      )
+    }
     val nextFlutterView = FlutterView(inflater.context, FlutterTextureView(inflater.context))
     flutterView = nextFlutterView
     nextFlutterView.attachToFlutterEngine(engine)
@@ -138,6 +160,7 @@ class AndroidWindow(
     } catch (_: IllegalArgumentException) {
     }
     rootView.removeOnAttachStateChangeListener(attachStateChangeListener)
+    displayMetricsChannel.setMethodCallHandler(null)
     isOpen = false
     WindowService.updateWindowRunning(false)
   }
@@ -151,8 +174,13 @@ class AndroidWindow(
       return
     }
 
-    @Suppress("Deprecation") windowManager.defaultDisplay.getMetrics(metrics)
-    setPosition(layoutParams.x, layoutParams.y)
+    @Suppress("Deprecation") windowManager.defaultDisplay.getRealMetrics(metrics)
+    val nextX = if (keepHorizontallyCentered) {
+      max(0, (metrics.widthPixels - layoutParams.width) / 2)
+    } else {
+      layoutParams.x
+    }
+    applyPosition(nextX, layoutParams.y)
   }
 
   fun setLayout(width: Int, height: Int) {
@@ -162,6 +190,13 @@ class AndroidWindow(
 
     layoutParams.width = width
     layoutParams.height = height
+    if (keepHorizontallyCentered) {
+      @Suppress("Deprecation")
+      windowManager.defaultDisplay.getRealMetrics(metrics)
+      layoutParams.x = max(0, (metrics.widthPixels - layoutParams.width) / 2)
+      windowManager.updateViewLayout(rootView, layoutParams)
+      return
+    }
     // A smaller window may make the previous bottom/right position invalid.
     // Re-applying the position keeps the entire overlay on screen.
     setPosition(layoutParams.x, layoutParams.y)
@@ -172,8 +207,15 @@ class AndroidWindow(
       return
     }
 
-    layoutParams.x = min(max(0, x), metrics.widthPixels - layoutParams.width)
-    layoutParams.y = min(max(0, y), metrics.heightPixels - layoutParams.height)
+    keepHorizontallyCentered = false
+    applyPosition(x, y)
+  }
+
+  private fun applyPosition(x: Int, y: Int) {
+    val maximumX = max(0, metrics.widthPixels - layoutParams.width)
+    val maximumY = max(0, metrics.heightPixels - layoutParams.height)
+    layoutParams.x = min(max(0, x), maximumX)
+    layoutParams.y = min(max(0, y), maximumY)
     windowManager.updateViewLayout(rootView, layoutParams)
   }
 }
