@@ -48,23 +48,42 @@ class WindowService : android.app.Service() {
     val height = intent.getIntExtra("height", 600)
     val x = intent.getIntExtra("x", 0)
     val y = intent.getIntExtra("y", 0)
+    val entry = intent.getStringExtra("entry") ?: "androidWindow"
+    val excludeFromCapture = entry == "realTimeScreenWindow"
 
     if (!running) {
       engine = FlutterEngine(application)
       FlutterEngineCache.getInstance().put(engineId, engine)
-      val entry = intent.getStringExtra("entry") ?: "androidWindow"
       val bundlePath = FlutterInjector.instance().flutterLoader().findAppBundlePath()
       val entryPoint = DartExecutor.DartEntrypoint(bundlePath, entry)
       engine.dartExecutor.executeDartEntrypoint(entryPoint)
 
-      androidWindow = AndroidWindow(this, focusable, width, height, x, y, engine)
+      androidWindow = AndroidWindow(
+        this,
+        focusable,
+        width,
+        height,
+        x,
+        y,
+        engine,
+        excludeFromCapture,
+      )
       androidWindow.open()
       updateWindowRunning(true)
       startForeground(1, getNotification())
       running = true
     } else {
       androidWindow.close()
-      androidWindow = AndroidWindow(this, focusable, width, height, x, y, engine)
+      androidWindow = AndroidWindow(
+        this,
+        focusable,
+        width,
+        height,
+        x,
+        y,
+        engine,
+        excludeFromCapture,
+      )
       androidWindow.open()
       updateWindowRunning(true)
     }

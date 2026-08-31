@@ -21,7 +21,8 @@ class AndroidWindow(
   height: Int,
   private val x: Int,
   private val y: Int,
-  private val engine: FlutterEngine
+  private val engine: FlutterEngine,
+  private val excludeFromCapture: Boolean = false,
 ) {
   private var startX = 0f
   private var startY = 0f
@@ -55,7 +56,10 @@ class AndroidWindow(
       WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
     } else {
       @Suppress("Deprecation") WindowManager.LayoutParams.TYPE_TOAST
-    }, if (focusable) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+    },
+    (if (focusable) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) or
+      (if (excludeFromCapture) WindowManager.LayoutParams.FLAG_SECURE else 0),
+    PixelFormat.TRANSLUCENT
   )
 
   fun open() {
@@ -75,6 +79,7 @@ class AndroidWindow(
     rootView.addOnAttachStateChangeListener(attachStateChangeListener)
     windowManager.addView(rootView, layoutParams)
     @Suppress("Deprecation") windowManager.defaultDisplay.getRealMetrics(metrics)
+    publishCaptureExclusion()
     displayMetricsChannel.setMethodCallHandler { call, result ->
       if (call.method != "getDisplayPhysicalSize") {
         result.notImplemented()
@@ -163,6 +168,9 @@ class AndroidWindow(
     displayMetricsChannel.setMethodCallHandler(null)
     isOpen = false
     WindowService.updateWindowRunning(false)
+    if (excludeFromCapture) {
+      CaptureExclusionStore.clear(service.applicationContext)
+    }
   }
 
   fun isRunning(): Boolean {
@@ -195,6 +203,7 @@ class AndroidWindow(
       windowManager.defaultDisplay.getRealMetrics(metrics)
       layoutParams.x = max(0, (metrics.widthPixels - layoutParams.width) / 2)
       windowManager.updateViewLayout(rootView, layoutParams)
+      publishCaptureExclusion()
       return
     }
     // A smaller window may make the previous bottom/right position invalid.
@@ -217,5 +226,20 @@ class AndroidWindow(
     layoutParams.x = min(max(0, x), maximumX)
     layoutParams.y = min(max(0, y), maximumY)
     windowManager.updateViewLayout(rootView, layoutParams)
+    publishCaptureExclusion()
+  }
+
+  private fun publishCaptureExclusion() {
+    // Every call site is reached only after addView succeeds or while the
+    // window is already open. Do not make the first publication depend on the
+    // platform reporting attachment synchronously from addView.
+    if (!excludeFromCapture) return
+    @Suppress("Deprecation") windowManager.defaultDisplay.getRealMetrics(metrics)
+    CaptureExclusionStore.publish(
+      context = service.applicationContext,
+      layoutParams = layoutParams,
+      displayWidth = metrics.widthPixels,
+      displayHeight = metrics.heightPixels,
+    )
   }
 }
