@@ -57,8 +57,11 @@ class AndroidWindow(
     } else {
       @Suppress("Deprecation") WindowManager.LayoutParams.TYPE_TOAST
     },
-    (if (focusable) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) or
-      (if (excludeFromCapture) WindowManager.LayoutParams.FLAG_SECURE else 0),
+    // Deliberately do not use FLAG_SECURE for recognition-side exclusion.
+    // Secure overlays can affect screenshots and MediaProjection differently
+    // across Android vendors. The recognition service excludes this window by
+    // using the physical bounds published below instead.
+    if (focusable) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
     PixelFormat.TRANSLUCENT
   )
 

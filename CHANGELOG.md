@@ -1,3 +1,9 @@
+## Unreleased
+
+- Exclude the screen-reading overlay from recognition by publishing its bounds
+  instead of setting `FLAG_SECURE`. The overlay now remains visible in system
+  screenshots and screen recordings.
+
 ## 0.3.2
 
 Fix types error
